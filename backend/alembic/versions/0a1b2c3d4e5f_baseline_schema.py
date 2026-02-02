@@ -1,28 +1,29 @@
-"""baseline schema (no HR module)
+"""Baseline schema (squashed)
 
-Revision ID: bacd5e6a253d
+Revision ID: 0a1b2c3d4e5f
 Revises:
-Create Date: 2026-02-02 16:37:34.122971
+Create Date: 2026-02-02
+
+This is a squashed baseline migration for Mission Control.
+All prior incremental migrations were removed to keep the repo simple.
 
 """
 
-from typing import Sequence, Union
+from __future__ import annotations
 
+from alembic import op
 import sqlalchemy as sa
 import sqlmodel
 
-from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "bacd5e6a253d"
-down_revision: Union[str, Sequence[str], None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+revision = "0a1b2c3d4e5f"
+down_revision = None
+branch_labels = None
+depends_on = None
 
 
 def upgrade() -> None:
-    """Upgrade schema."""
-
     # Departments (FK to employees added after employees table exists)
     op.create_table(
         "departments",
@@ -40,6 +41,7 @@ def upgrade() -> None:
         sa.Column("name", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("employee_type", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("department_id", sa.Integer(), nullable=True),
+        sa.Column("team_id", sa.Integer(), nullable=True),
         sa.Column("manager_id", sa.Integer(), nullable=True),
         sa.Column("title", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
         sa.Column("status", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
@@ -53,15 +55,50 @@ def upgrade() -> None:
     # Break the departments<->employees cycle: add this FK after both tables exist
     op.create_foreign_key(None, "departments", "employees", ["head_employee_id"], ["id"])
 
+    # Teams
+    op.create_table(
+        "teams",
+        sa.Column("id", sa.Integer(), primary_key=True, nullable=False),
+        sa.Column("name", sa.String(), nullable=False),
+        sa.Column("department_id", sa.Integer(), nullable=False),
+        sa.Column("lead_employee_id", sa.Integer(), nullable=True),
+        sa.ForeignKeyConstraint(["department_id"], ["departments.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["lead_employee_id"], ["employees.id"], ondelete="SET NULL"),
+        sa.UniqueConstraint("department_id", "name", name="uq_teams_department_id_name"),
+    )
+    op.create_index("ix_teams_name", "teams", ["name"], unique=False)
+    op.create_index("ix_teams_department_id", "teams", ["department_id"], unique=False)
+
+    # Employees.team_id FK (added after teams exists)
+    op.create_index("ix_employees_team_id", "employees", ["team_id"], unique=False)
+    op.create_foreign_key(
+        "fk_employees_team_id_teams",
+        "employees",
+        "teams",
+        ["team_id"],
+        ["id"],
+        ondelete="SET NULL",
+    )
+
     # Projects
     op.create_table(
         "projects",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("name", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("status", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+        sa.Column("team_id", sa.Integer(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_projects_name"), "projects", ["name"], unique=True)
+    op.create_index("ix_projects_team_id", "projects", ["team_id"], unique=False)
+    op.create_foreign_key(
+        "fk_projects_team_id_teams",
+        "projects",
+        "teams",
+        ["team_id"],
+        ["id"],
+        ondelete="SET NULL",
+    )
 
     # Activities
     op.create_table(
@@ -129,8 +166,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Downgrade schema."""
-
     op.drop_index(op.f("ix_task_comments_task_id"), table_name="task_comments")
     op.drop_table("task_comments")
 
@@ -142,8 +177,17 @@ def downgrade() -> None:
 
     op.drop_table("activities")
 
+    op.drop_constraint("fk_projects_team_id_teams", "projects", type_="foreignkey")
+    op.drop_index("ix_projects_team_id", table_name="projects")
     op.drop_index(op.f("ix_projects_name"), table_name="projects")
     op.drop_table("projects")
+
+    op.drop_constraint("fk_employees_team_id_teams", "employees", type_="foreignkey")
+    op.drop_index("ix_employees_team_id", table_name="employees")
+
+    op.drop_index("ix_teams_department_id", table_name="teams")
+    op.drop_index("ix_teams_name", table_name="teams")
+    op.drop_table("teams")
 
     op.drop_table("employees")
 
