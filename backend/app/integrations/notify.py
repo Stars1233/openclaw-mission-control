@@ -175,7 +175,21 @@ def build_message(
         return f"New comment on {base}.{snippet}\nPlease review and respond in Mission Control."
 
     if ctx.event == "status.changed":
-        return f"Status changed on {base} → {task.status}.\nPlease review and respond in Mission Control."
+        new_status = (getattr(task, "status", None) or "").lower()
+        if new_status in {"review", "ready_for_review"}:
+            return (
+                f"Review requested for {base}.\n"
+                "As the reviewer/manager, you must:\n"
+                "1) Read the task + latest assignee comments\n"
+                "2) Decide: approve or request changes\n"
+                "3) Leave an audit comment explaining your decision (required)\n"
+                f"4) Submit decision via POST /tasks/{task.id}/review (decision=approve|changes)\n"
+                "Approve → task becomes done. Changes → task returns to in_progress and assignee is notified."
+            )
+        return (
+            f"Status changed on {base} → {task.status}.\n"
+            "Please review and respond in Mission Control."
+        )
 
     if ctx.event == "task.created":
         return f"New task created: {base}.\nPlease review and respond in Mission Control."
