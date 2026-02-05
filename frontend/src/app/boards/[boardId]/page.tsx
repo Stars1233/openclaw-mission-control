@@ -358,6 +358,14 @@ export default function BoardDetailPage() {
     [tasks, assigneeById],
   );
 
+  const orderedComments = useMemo(() => {
+    return [...comments].sort((a, b) => {
+      const aTime = new Date(a.created_at).getTime();
+      const bTime = new Date(b.created_at).getTime();
+      return bTime - aTime;
+    });
+  }, [comments]);
+
   const boardAgents = useMemo(
     () => agents.filter((agent) => !boardId || agent.board_id === boardId),
     [agents, boardId],
@@ -621,7 +629,7 @@ export default function BoardDetailPage() {
       ) : null}
       <aside
         className={cn(
-          "fixed right-0 top-0 z-50 h-full w-[420px] max-w-[92vw] transform bg-white shadow-2xl transition-transform",
+          "fixed right-0 top-0 z-50 h-full w-[760px] max-w-[99vw] transform bg-white shadow-2xl transition-transform",
           isDetailOpen ? "translate-x-0" : "translate-x-full",
         )}
       >
@@ -648,7 +656,7 @@ export default function BoardDetailPage() {
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Description
               </p>
-              <p className="text-sm text-slate-700">
+              <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">
                 {selectedTask?.description || "No description provided."}
               </p>
             </div>
@@ -666,7 +674,7 @@ export default function BoardDetailPage() {
                 <p className="text-sm text-slate-500">No comments yet.</p>
               ) : (
                 <div className="space-y-3">
-                  {comments.map((comment) => (
+                  {orderedComments.map((comment) => (
                     <div
                       key={comment.id}
                       className="rounded-xl border border-slate-200 bg-white p-3"
@@ -681,20 +689,26 @@ export default function BoardDetailPage() {
                         <span>{formatCommentTimestamp(comment.created_at)}</span>
                       </div>
                       {comment.message?.trim() ? (
-                        <div className="mt-2 text-sm text-slate-900">
+                        <div className="mt-2 text-sm text-slate-900 whitespace-pre-wrap break-words">
                           <ReactMarkdown
                             components={{
                               p: ({ ...props }) => (
-                                <p className="text-sm text-slate-900" {...props} />
+                                <p
+                                  className="text-sm text-slate-900 whitespace-pre-wrap break-words"
+                                  {...props}
+                                />
                               ),
                               ul: ({ ...props }) => (
                                 <ul
-                                  className="list-disc pl-5 text-sm text-slate-900"
+                                  className="list-disc pl-5 text-sm text-slate-900 whitespace-pre-wrap break-words"
                                   {...props}
                                 />
                               ),
                               li: ({ ...props }) => (
-                                <li className="mb-1 text-sm text-slate-900" {...props} />
+                                <li
+                                  className="mb-1 text-sm text-slate-900 whitespace-pre-wrap break-words"
+                                  {...props}
+                                />
                               ),
                               strong: ({ ...props }) => (
                                 <strong

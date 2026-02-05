@@ -21,9 +21,16 @@ from app.api.deps import (
 )
 from app.core.auth import AuthContext
 from app.db.session import engine, get_session
+from app.integrations.openclaw_gateway import (
+    GatewayConfig as GatewayClientConfig,
+    OpenClawGatewayError,
+    ensure_session,
+    send_message,
+)
 from app.models.activity_events import ActivityEvent
 from app.models.agents import Agent
 from app.models.boards import Board
+from app.models.gateways import Gateway
 from app.models.tasks import Task
 from app.schemas.tasks import TaskCommentCreate, TaskCommentRead, TaskCreate, TaskRead, TaskUpdate
 from app.services.activity_log import record_activity
@@ -124,6 +131,84 @@ def _serialize_comment(event: ActivityEvent) -> dict[str, object]:
     return TaskCommentRead.model_validate(event).model_dump(mode="json")
 
 
+def _gateway_config(session: Session, board: Board) -> GatewayClientConfig | None:
+    if not board.gateway_id:
+        return None
+    gateway = session.get(Gateway, board.gateway_id)
+    if gateway is None or not gateway.url:
+        return None
+    return GatewayClientConfig(url=gateway.url, token=gateway.token)
+
+
+async def _send_lead_task_message(
+    *,
+    session_key: str,
+    config: GatewayClientConfig,
+    message: str,
+) -> None:
+    await ensure_session(session_key, config=config, label="Lead Agent")
+    await send_message(message, session_key=session_key, config=config, deliver=False)
+
+
+def _notify_lead_on_task_create(
+    *,
+    session: Session,
+    board: Board,
+    task: Task,
+) -> None:
+    lead = session.exec(
+        select(Agent)
+        .where(Agent.board_id == board.id)
+        .where(Agent.is_board_lead.is_(True))
+    ).first()
+    if lead is None or not lead.openclaw_session_id:
+        return
+    config = _gateway_config(session, board)
+    if config is None:
+        return
+    description = (task.description or "").strip()
+    if len(description) > 500:
+        description = f"{description[:497]}..."
+    details = [
+        f"Board: {board.name}",
+        f"Task: {task.title}",
+        f"Task ID: {task.id}",
+        f"Status: {task.status}",
+    ]
+    if description:
+        details.append(f"Description: {description}")
+    message = (
+        "NEW TASK ADDED\n"
+        + "\n".join(details)
+        + "\n\nTake action: triage, assign, or plan next steps."
+    )
+    try:
+        asyncio.run(
+            _send_lead_task_message(
+                session_key=lead.openclaw_session_id,
+                config=config,
+                message=message,
+            )
+        )
+        record_activity(
+            session,
+            event_type="task.lead_notified",
+            message=f"Lead agent notified for task: {task.title}.",
+            agent_id=lead.id,
+            task_id=task.id,
+        )
+        session.commit()
+    except OpenClawGatewayError as exc:
+        record_activity(
+            session,
+            event_type="task.lead_notify_failed",
+            message=f"Lead notify failed: {exc}",
+            agent_id=lead.id,
+            task_id=task.id,
+        )
+        session.commit()
+
+
 @router.get("/stream")
 async def stream_tasks(
     request: Request,
@@ -214,6 +299,7 @@ def create_task(
         message=f"Task created: {task.title}.",
     )
     session.commit()
+    _notify_lead_on_task_create(session=session, board=board, task=task)
     return task
 
 
