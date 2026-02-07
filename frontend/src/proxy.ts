@@ -14,8 +14,8 @@ const isPublicRoute = createRouteMatcher(["/sign-in(.*)"]);
 export default isClerkEnabled()
   ? clerkMiddleware(async (auth, req) => {
       if (isPublicRoute(req)) return NextResponse.next();
-      const session = await auth();
-      session.protect();
+      // Clerk middleware auth object supports protect() directly.
+      auth().protect();
       return NextResponse.next();
     })
   : () => NextResponse.next();
