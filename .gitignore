@@ -20,3 +20,6 @@ node_modules/
 
 # Accidental literal "~" directories (e.g. when a configured path contains "~" but isn't expanded)
 backend/~/
+backend/coverage.xml
+backend/.coverage
+frontend/coverage
