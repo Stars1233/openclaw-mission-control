@@ -5,7 +5,7 @@ from typing import Any, TypeVar, cast
 
 from sqlalchemy import delete as sql_delete
 from sqlalchemy import update as sql_update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlmodel import SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel.sql.expression import SelectOfScalar
@@ -24,7 +24,7 @@ class MultipleObjectsReturned(LookupError):
 async def _flush_or_rollback(session: AsyncSession) -> None:
     try:
         await session.flush()
-    except Exception:
+    except SQLAlchemyError:
         await session.rollback()
         raise
 
@@ -32,7 +32,7 @@ async def _flush_or_rollback(session: AsyncSession) -> None:
 async def _commit_or_rollback(session: AsyncSession) -> None:
     try:
         await session.commit()
-    except Exception:
+    except SQLAlchemyError:
         await session.rollback()
         raise
 
@@ -268,7 +268,7 @@ async def get_or_create(
         if existing is not None:
             return existing, False
         raise
-    except Exception:
+    except SQLAlchemyError:
         await session.rollback()
         raise
 

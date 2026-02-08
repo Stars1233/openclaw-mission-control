@@ -7,6 +7,7 @@ from pathlib import Path
 import anyio
 from alembic import command
 from alembic.config import Config
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -69,9 +70,15 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     async with async_session_maker() as session:
         try:
             yield session
-        except Exception:
+        finally:
+            try:
+                in_txn = bool(session.in_transaction())
+            except SQLAlchemyError:
+                logger.exception("Failed to inspect session transaction state.")
+                return
+            if not in_txn:
+                return
             try:
                 await session.rollback()
-            except Exception:
+            except SQLAlchemyError:
                 logger.exception("Failed to rollback session after request error.")
-            raise
