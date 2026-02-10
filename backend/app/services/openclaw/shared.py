@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 
 
 GatewayClientConfig = _GatewayClientConfig
+# Keep integration exceptions behind the OpenClaw service boundary.
+GatewayTransportError = OpenClawGatewayError
 
 
 class GatewayAgentIdentity:
@@ -121,6 +123,3 @@ def resolve_trace_id(correlation_id: str | None, *, prefix: str) -> str:
 
 
 logger = logging.getLogger(__name__)
-
-# Keep integration exceptions behind the OpenClaw service boundary.
-GatewayTransportError = OpenClawGatewayError

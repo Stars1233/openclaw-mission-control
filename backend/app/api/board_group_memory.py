@@ -34,9 +34,8 @@ from app.schemas.board_group_memory import BoardGroupMemoryCreate, BoardGroupMem
 from app.schemas.pagination import DefaultLimitOffsetPage
 from app.services.mentions import extract_mentions, matches_agent_mention
 from app.services.openclaw.shared import (
-    GatewayTransportError,
     optional_gateway_config_for_board,
-    send_gateway_agent_message,
+    send_gateway_agent_message_safe,
 )
 from app.services.organizations import (
     is_org_admin,
@@ -243,14 +242,13 @@ async def _notify_group_target(
         f"POST {context.base_url}/api/v1/boards/{board.id}/group-memory\n"
         'Body: {"content":"...","tags":["chat"]}'
     )
-    try:
-        await send_gateway_agent_message(
-            session_key=session_key,
-            config=config,
-            agent_name=agent.name,
-            message=message,
-        )
-    except GatewayTransportError:
+    error = await send_gateway_agent_message_safe(
+        session_key=session_key,
+        config=config,
+        agent_name=agent.name,
+        message=message,
+    )
+    if error is not None:
         return
 
 

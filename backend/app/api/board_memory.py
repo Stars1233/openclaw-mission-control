@@ -30,9 +30,8 @@ from app.schemas.pagination import DefaultLimitOffsetPage
 from app.services.mentions import extract_mentions, matches_agent_mention
 from app.services.openclaw.shared import (
     GatewayClientConfig,
-    GatewayTransportError,
     optional_gateway_config_for_board,
-    send_gateway_agent_message,
+    send_gateway_agent_message_safe,
 )
 
 if TYPE_CHECKING:
@@ -116,15 +115,14 @@ async def _send_control_command(
             continue
         if not agent.openclaw_session_id:
             continue
-        try:
-            await send_gateway_agent_message(
-                session_key=agent.openclaw_session_id,
-                config=config,
-                agent_name=agent.name,
-                message=command,
-                deliver=True,
-            )
-        except GatewayTransportError:
+        error = await send_gateway_agent_message_safe(
+            session_key=agent.openclaw_session_id,
+            config=config,
+            agent_name=agent.name,
+            message=command,
+            deliver=True,
+        )
+        if error is not None:
             continue
 
 
@@ -208,14 +206,13 @@ async def _notify_chat_targets(
             f"POST {base_url}/api/v1/agent/boards/{board.id}/memory\n"
             'Body: {"content":"...","tags":["chat"]}'
         )
-        try:
-            await send_gateway_agent_message(
-                session_key=agent.openclaw_session_id,
-                config=config,
-                agent_name=agent.name,
-                message=message,
-            )
-        except GatewayTransportError:
+        error = await send_gateway_agent_message_safe(
+            session_key=agent.openclaw_session_id,
+            config=config,
+            agent_name=agent.name,
+            message=message,
+        )
+        if error is not None:
             continue
 
 

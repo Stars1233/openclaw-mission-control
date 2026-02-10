@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 from collections import deque
-from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -45,7 +44,7 @@ from app.services.openclaw.shared import (
     GatewayClientConfig,
     GatewayTransportError,
     optional_gateway_config_for_board,
-    send_gateway_agent_message,
+    send_gateway_agent_message_safe,
 )
 from app.services.organizations import require_board_access
 from app.services.task_dependencies import (
@@ -309,8 +308,8 @@ async def _send_lead_task_message(
     session_key: str,
     config: GatewayClientConfig,
     message: str,
-) -> None:
-    await send_gateway_agent_message(
+) -> GatewayTransportError | None:
+    return await send_gateway_agent_message_safe(
         session_key=session_key,
         config=config,
         agent_name="Lead Agent",
@@ -325,8 +324,8 @@ async def _send_agent_task_message(
     config: GatewayClientConfig,
     agent_name: str,
     message: str,
-) -> None:
-    await send_gateway_agent_message(
+) -> GatewayTransportError | None:
+    return await send_gateway_agent_message_safe(
         session_key=session_key,
         config=config,
         agent_name=agent_name,
@@ -361,13 +360,13 @@ async def _notify_agent_on_task_assign(
         + "\n".join(details)
         + ("\n\nTake action: open the task and begin work. " "Post updates as task comments.")
     )
-    try:
-        await _send_agent_task_message(
-            session_key=agent.openclaw_session_id,
-            config=config,
-            agent_name=agent.name,
-            message=message,
-        )
+    error = await _send_agent_task_message(
+        session_key=agent.openclaw_session_id,
+        config=config,
+        agent_name=agent.name,
+        message=message,
+    )
+    if error is None:
         record_activity(
             session,
             event_type="task.assignee_notified",
@@ -376,11 +375,11 @@ async def _notify_agent_on_task_assign(
             task_id=task.id,
         )
         await session.commit()
-    except GatewayTransportError as exc:
+    else:
         record_activity(
             session,
             event_type="task.assignee_notify_failed",
-            message=f"Assignee notify failed: {exc}",
+            message=f"Assignee notify failed: {error}",
             agent_id=agent.id,
             task_id=task.id,
         )
@@ -433,12 +432,12 @@ async def _notify_lead_on_task_create(
         + "\n".join(details)
         + "\n\nTake action: triage, assign, or plan next steps."
     )
-    try:
-        await _send_lead_task_message(
-            session_key=lead.openclaw_session_id,
-            config=config,
-            message=message,
-        )
+    error = await _send_lead_task_message(
+        session_key=lead.openclaw_session_id,
+        config=config,
+        message=message,
+    )
+    if error is None:
         record_activity(
             session,
             event_type="task.lead_notified",
@@ -447,11 +446,11 @@ async def _notify_lead_on_task_create(
             task_id=task.id,
         )
         await session.commit()
-    except GatewayTransportError as exc:
+    else:
         record_activity(
             session,
             event_type="task.lead_notify_failed",
-            message=f"Lead notify failed: {exc}",
+            message=f"Lead notify failed: {error}",
             agent_id=lead.id,
             task_id=task.id,
         )
@@ -488,12 +487,12 @@ async def _notify_lead_on_task_unassigned(
         + "\n".join(details)
         + "\n\nTake action: assign a new owner or adjust the plan."
     )
-    try:
-        await _send_lead_task_message(
-            session_key=lead.openclaw_session_id,
-            config=config,
-            message=message,
-        )
+    error = await _send_lead_task_message(
+        session_key=lead.openclaw_session_id,
+        config=config,
+        message=message,
+    )
+    if error is None:
         record_activity(
             session,
             event_type="task.lead_unassigned_notified",
@@ -502,11 +501,11 @@ async def _notify_lead_on_task_unassigned(
             task_id=task.id,
         )
         await session.commit()
-    except GatewayTransportError as exc:
+    else:
         record_activity(
             session,
             event_type="task.lead_unassigned_notify_failed",
-            message=f"Lead notify failed: {exc}",
+            message=f"Lead notify failed: {error}",
             agent_id=lead.id,
             task_id=task.id,
         )
@@ -1057,13 +1056,12 @@ async def _notify_task_comment_targets(
             "If you are mentioned but not assigned, reply in the task "
             "thread but do not change task status."
         )
-        with suppress(GatewayTransportError):
-            await _send_agent_task_message(
-                session_key=agent.openclaw_session_id,
-                config=config,
-                agent_name=agent.name,
-                message=notification,
-            )
+        await _send_agent_task_message(
+            session_key=agent.openclaw_session_id,
+            config=config,
+            agent_name=agent.name,
+            message=notification,
+        )
 
 
 @dataclass(slots=True)
