@@ -68,80 +68,86 @@ def test_normalize_task_ids_dedupes_and_merges_sources() -> None:
 @pytest.mark.asyncio
 async def test_task_counts_for_board_supports_multi_task_links_and_legacy_rows() -> None:
     engine = await _make_engine()
-    async with await _make_session(engine) as session:
-        board_id, task_a, task_b, task_c = await _seed_board(session)
+    try:
+        async with await _make_session(engine) as session:
+            board_id, task_a, task_b, task_c = await _seed_board(session)
 
-        approval_pending_multi = Approval(
-            board_id=board_id,
-            task_id=task_a,
-            action_type="task.update",
-            confidence=80,
-            status="pending",
-        )
-        approval_approved = Approval(
-            board_id=board_id,
-            task_id=task_a,
-            action_type="task.complete",
-            confidence=90,
-            status="approved",
-        )
-        approval_pending_two = Approval(
-            board_id=board_id,
-            task_id=task_b,
-            action_type="task.assign",
-            confidence=75,
-            status="pending",
-        )
-        approval_legacy = Approval(
-            board_id=board_id,
-            task_id=task_c,
-            action_type="task.comment",
-            confidence=65,
-            status="pending",
-        )
-        session.add(approval_pending_multi)
-        session.add(approval_approved)
-        session.add(approval_pending_two)
-        session.add(approval_legacy)
-        await session.flush()
+            approval_pending_multi = Approval(
+                board_id=board_id,
+                task_id=task_a,
+                action_type="task.update",
+                confidence=80,
+                status="pending",
+            )
+            approval_approved = Approval(
+                board_id=board_id,
+                task_id=task_a,
+                action_type="task.complete",
+                confidence=90,
+                status="approved",
+            )
+            approval_pending_two = Approval(
+                board_id=board_id,
+                task_id=task_b,
+                action_type="task.assign",
+                confidence=75,
+                status="pending",
+            )
+            approval_legacy = Approval(
+                board_id=board_id,
+                task_id=task_c,
+                action_type="task.comment",
+                confidence=65,
+                status="pending",
+            )
+            session.add(approval_pending_multi)
+            session.add(approval_approved)
+            session.add(approval_pending_two)
+            session.add(approval_legacy)
+            await session.flush()
 
-        session.add(
-            ApprovalTaskLink(approval_id=approval_pending_multi.id, task_id=task_a),
-        )
-        session.add(
-            ApprovalTaskLink(approval_id=approval_pending_multi.id, task_id=task_b),
-        )
-        session.add(ApprovalTaskLink(approval_id=approval_approved.id, task_id=task_a))
-        session.add(ApprovalTaskLink(approval_id=approval_pending_two.id, task_id=task_b))
-        session.add(ApprovalTaskLink(approval_id=approval_pending_two.id, task_id=task_c))
-        await session.commit()
+            session.add(
+                ApprovalTaskLink(approval_id=approval_pending_multi.id, task_id=task_a),
+            )
+            session.add(
+                ApprovalTaskLink(approval_id=approval_pending_multi.id, task_id=task_b),
+            )
+            session.add(ApprovalTaskLink(approval_id=approval_approved.id, task_id=task_a))
+            session.add(ApprovalTaskLink(approval_id=approval_pending_two.id, task_id=task_b))
+            session.add(ApprovalTaskLink(approval_id=approval_pending_two.id, task_id=task_c))
+            await session.commit()
 
-        counts = await task_counts_for_board(session, board_id=board_id)
+            counts = await task_counts_for_board(session, board_id=board_id)
 
-        assert counts[task_a] == (2, 1)
-        assert counts[task_b] == (2, 2)
-        assert counts[task_c] == (2, 2)
+            assert counts[task_a] == (2, 1)
+            assert counts[task_b] == (2, 2)
+            assert counts[task_c] == (2, 2)
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio
 async def test_load_task_ids_by_approval_preserves_insert_order() -> None:
     engine = await _make_engine()
-    async with await _make_session(engine) as session:
-        board_id, task_a, task_b, task_c = await _seed_board(session)
+    try:
+        async with await _make_session(engine) as session:
+            board_id, task_a, task_b, task_c = await _seed_board(session)
 
-        approval = Approval(
-            board_id=board_id,
-            task_id=task_a,
-            action_type="task.update",
-            confidence=88,
-            status="pending",
-        )
-        session.add(approval)
-        await session.flush()
-        session.add(ApprovalTaskLink(approval_id=approval.id, task_id=task_a))
-        session.add(ApprovalTaskLink(approval_id=approval.id, task_id=task_b))
-        session.add(ApprovalTaskLink(approval_id=approval.id, task_id=task_c))
-        await session.commit()
+            approval = Approval(
+                board_id=board_id,
+                task_id=task_a,
+                action_type="task.update",
+                confidence=88,
+                status="pending",
+            )
+            session.add(approval)
+            await session.flush()
+            session.add(ApprovalTaskLink(approval_id=approval.id, task_id=task_a))
+            session.add(ApprovalTaskLink(approval_id=approval.id, task_id=task_b))
+            session.add(ApprovalTaskLink(approval_id=approval.id, task_id=task_c))
+            await session.commit()
 
-        mapping = await load_task_ids_by_approval(session, approval_ids=[approval.id])
-        assert mapping[approval.id] == [task_a, task_b, task_c]
+            mapping = await load_task_ids_by_approval(session, approval_ids=[approval.id])
+            assert mapping[approval.id] == [task_a, task_b, task_c]
+    finally:
+        await engine.dispose()
