@@ -87,6 +87,11 @@ jobs:
           make frontend-test
           make frontend-build
 
+
+      - name: Docs quality gates (lint + relative link check)
+        run: |
+          make docs-check
+
       - name: Upload coverage artifacts
         if: always()
         uses: actions/upload-artifact@v4

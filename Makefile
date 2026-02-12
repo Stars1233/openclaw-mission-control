@@ -122,3 +122,15 @@ backend-templates-sync: ## Sync templates to existing gateway agents (usage: mak
 
 .PHONY: check
 check: lint typecheck backend-coverage frontend-test build ## Run lint + typecheck + tests + coverage + build
+
+
+.PHONY: docs-lint
+docs-lint: frontend-tooling ## Lint markdown files (tiny ruleset; avoids noisy churn)
+	$(NODE_WRAP) npx markdownlint-cli2@0.15.0 --config .markdownlint-cli2.yaml "**/*.md"
+
+.PHONY: docs-link-check
+docs-link-check: ## Check for broken relative links in markdown docs
+	python scripts/check_markdown_links.py
+
+.PHONY: docs-check
+docs-check: docs-lint docs-link-check ## Run all docs quality gates
