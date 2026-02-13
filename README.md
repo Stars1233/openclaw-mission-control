@@ -58,6 +58,8 @@ The installer is interactive and will:
 - Generate and configure environment files.
 - Bootstrap and start the selected deployment mode.
 
+Installer support matrix: [`docs/installer-support.md`](./docs/installer-support.md)
+
 ### Option B: Manual setup
 
 ### Prerequisites

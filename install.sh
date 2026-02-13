@@ -7,7 +7,8 @@ REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 LOG_DIR="$REPO_ROOT/.install-logs"
 
 LINUX_DISTRO=""
-APT_UPDATED=0
+PKG_MANAGER=""
+PKG_UPDATED=0
 DOCKER_USE_SUDO=0
 INTERACTIVE=0
 
@@ -145,12 +146,40 @@ as_root() {
   fi
 }
 
+install_command_hint() {
+  local manager="$1"
+  shift
+  local -a packages
+  packages=("$@")
+
+  case "$manager" in
+    apt)
+      printf 'sudo apt-get update && sudo apt-get install -y %s' "${packages[*]}"
+      ;;
+    dnf)
+      printf 'sudo dnf install -y %s' "${packages[*]}"
+      ;;
+    yum)
+      printf 'sudo yum install -y %s' "${packages[*]}"
+      ;;
+    zypper)
+      printf 'sudo zypper install -y %s' "${packages[*]}"
+      ;;
+    pacman)
+      printf 'sudo pacman -Sy --noconfirm %s' "${packages[*]}"
+      ;;
+    *)
+      printf 'install packages manually: %s' "${packages[*]}"
+      ;;
+  esac
+}
+
 detect_platform() {
   local uname_s
   local id_like
   uname_s="$(uname -s)"
   if [[ "$uname_s" != "Linux" ]]; then
-    die "Unsupported platform: $uname_s. This installer currently supports Ubuntu/Debian only."
+    die "Unsupported platform: $uname_s. Linux is required."
   fi
 
   if [[ ! -r /etc/os-release ]]; then
@@ -162,13 +191,25 @@ detect_platform() {
   LINUX_DISTRO="${ID:-unknown}"
   id_like="${ID_LIKE:-}"
 
-  if [[ "$LINUX_DISTRO" != "ubuntu" && "$LINUX_DISTRO" != "debian" && ! "$id_like" =~ (^|[[:space:]])debian($|[[:space:]]) ]]; then
-    die "Unsupported Linux distribution: $LINUX_DISTRO. This installer currently supports Ubuntu/Debian only."
+  if command_exists apt-get; then
+    PKG_MANAGER="apt"
+  elif command_exists dnf; then
+    PKG_MANAGER="dnf"
+  elif command_exists yum; then
+    PKG_MANAGER="yum"
+  elif command_exists zypper; then
+    PKG_MANAGER="zypper"
+  elif command_exists pacman; then
+    PKG_MANAGER="pacman"
+  else
+    die "Unsupported Linux distribution: $LINUX_DISTRO. No supported package manager detected (expected apt/dnf/yum/zypper/pacman)."
   fi
 
-  if ! command_exists apt-get; then
-    die "apt-get is required on this system."
+  if [[ "$PKG_MANAGER" != "apt" ]]; then
+    warn "Detected distro '$LINUX_DISTRO' with package manager '$PKG_MANAGER'. This installer currently provides Debian/Ubuntu as stable path; other distros are scaffolded with actionable guidance."
   fi
+
+  info "Detected Linux distro: $LINUX_DISTRO (package manager: $PKG_MANAGER)"
 }
 
 install_packages() {
@@ -179,11 +220,21 @@ install_packages() {
     return 0
   fi
 
-  if [[ "$APT_UPDATED" -eq 0 ]]; then
-    as_root apt-get update
-    APT_UPDATED=1
-  fi
-  as_root apt-get install -y "${packages[@]}"
+  case "$PKG_MANAGER" in
+    apt)
+      if [[ "$PKG_UPDATED" -eq 0 ]]; then
+        as_root apt-get update
+        PKG_UPDATED=1
+      fi
+      as_root apt-get install -y "${packages[@]}"
+      ;;
+    dnf|yum|zypper|pacman)
+      die "Automatic package install is not implemented yet for '$PKG_MANAGER'. Run: $(install_command_hint "$PKG_MANAGER" "${packages[@]}")"
+      ;;
+    *)
+      die "Unknown package manager '$PKG_MANAGER'. Install manually: ${packages[*]}"
+      ;;
+  esac
 }
 
 prompt_with_default() {
@@ -373,29 +424,39 @@ ensure_nodejs() {
     node_version="$(node -v || true)"
     node_major="${node_version#v}"
     node_major="${node_major%%.*}"
-    if [[ "$node_major" =~ ^[0-9]+$ ]] && ((node_major >= 20)) && command_exists npm; then
+    if [[ "$node_major" =~ ^[0-9]+$ ]] && ((node_major >= 22)) && command_exists npm; then
       return
     fi
   fi
 
-  info "Node.js >= 20 is required for local deployment."
+  info "Node.js >= 22 is required for local deployment."
   if ! confirm "Install or upgrade Node.js now?" "y"; then
-    die "Cannot continue without Node.js >= 20."
+    die "Cannot continue without Node.js >= 22."
+  fi
+
+  if [[ "$PKG_MANAGER" != "apt" ]]; then
+    die "Node.js auto-install is currently implemented for apt-based distros only. Install Node.js >= 22 manually, then rerun installer. Suggested command: $(install_command_hint "$PKG_MANAGER" nodejs npm)"
   fi
 
   install_packages ca-certificates curl gnupg
-  curl -fsSL https://deb.nodesource.com/setup_20.x | as_root bash -
+  curl -fsSL https://deb.nodesource.com/setup_22.x | as_root bash -
   install_packages nodejs
 
   if ! command_exists node || ! command_exists npm; then
     die "Node.js/npm installation failed."
   fi
 
+  # Refresh command lookup + PATH after install (CI runners often have an older Node in PATH).
+  hash -r || true
+  if [[ -x /usr/bin/node ]]; then
+    export PATH="/usr/bin:$PATH"
+  fi
+
   node_version="$(node -v || true)"
   node_major="${node_version#v}"
   node_major="${node_major%%.*}"
-  if [[ ! "$node_major" =~ ^[0-9]+$ ]] || ((node_major < 20)); then
-    die "Detected Node.js $node_version. Node.js >= 20 is required."
+  if [[ ! "$node_major" =~ ^[0-9]+$ ]] || ((node_major < 22)); then
+    die "Detected Node.js $node_version. Node.js >= 22 is required."
   fi
 }
 
