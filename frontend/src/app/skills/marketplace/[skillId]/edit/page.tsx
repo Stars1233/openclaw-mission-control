@@ -7,6 +7,6 @@ type EditMarketplaceSkillPageProps = {
 export default async function EditMarketplaceSkillPage({
   params,
 }: EditMarketplaceSkillPageProps) {
-  const { skillId } = await params;
-  redirect(`/skills/packs/${skillId}/edit`);
+  await params;
+  redirect("/skills/marketplace");
 }

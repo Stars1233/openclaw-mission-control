@@ -80,9 +80,9 @@ const toPackLabel = (packUrl: string): string => {
   }
 };
 
-const toPackDetailHref = (packUrl: string): string => {
+const toPacksHref = (packUrl: string): string => {
   const params = new URLSearchParams({ source_url: packUrl });
-  return `/skills/packs/detail?${params.toString()}`;
+  return `/skills/packs?${params.toString()}`;
 };
 
 export function MarketplaceSkillsTable({
@@ -143,7 +143,7 @@ export function MarketplaceSkillsTable({
           const packUrl = toPackUrl(row.original.source_url);
           return (
             <Link
-              href={toPackDetailHref(packUrl)}
+              href={toPacksHref(packUrl)}
               className="inline-flex items-center gap-1 text-sm font-medium text-slate-700 hover:text-blue-600"
             >
               {truncate(toPackLabel(packUrl), 40)}

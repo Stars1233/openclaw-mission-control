@@ -15,6 +15,7 @@ from sqlmodel import SQLModel, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.deps import require_org_admin
+from app.api.gateways import router as gateways_router
 from app.api.skills_marketplace import (
     PackSkillCandidate,
     _collect_pack_skills_from_repo,
@@ -44,6 +45,7 @@ def _build_test_app(
 ) -> FastAPI:
     app = FastAPI()
     api_v1 = APIRouter(prefix="/api/v1")
+    api_v1.include_router(gateways_router)
     api_v1.include_router(skills_marketplace_router)
     app.include_router(api_v1)
 
@@ -167,6 +169,58 @@ async def test_install_skill_dispatches_instruction_and_persists_installation(
                 )
             ).all()
             assert len(installed_rows) == 1
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_delete_gateway_removes_installed_skill_rows() -> None:
+    engine = await _make_engine()
+    session_maker = async_sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    try:
+        async with session_maker() as session:
+            organization, gateway = await _seed_base(session)
+            skill = MarketplaceSkill(
+                organization_id=organization.id,
+                name="Deploy Helper",
+                source_url="https://example.com/skills/deploy-helper.git",
+            )
+            session.add(skill)
+            await session.commit()
+            await session.refresh(skill)
+            session.add(
+                GatewayInstalledSkill(
+                    gateway_id=gateway.id,
+                    skill_id=skill.id,
+                ),
+            )
+            await session.commit()
+
+        app = _build_test_app(session_maker, organization=organization)
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://testserver",
+        ) as client:
+            response = await client.delete(f"/api/v1/gateways/{gateway.id}")
+
+        assert response.status_code == 200
+        assert response.json() == {"ok": True}
+
+        async with session_maker() as session:
+            deleted_gateway = await session.get(Gateway, gateway.id)
+            assert deleted_gateway is None
+            remaining_installs = (
+                await session.exec(
+                    select(GatewayInstalledSkill).where(
+                        col(GatewayInstalledSkill.gateway_id) == gateway.id,
+                    ),
+                )
+            ).all()
+            assert remaining_installs == []
     finally:
         await engine.dispose()
 

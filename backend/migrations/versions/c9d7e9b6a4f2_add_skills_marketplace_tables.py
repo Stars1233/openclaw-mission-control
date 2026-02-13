@@ -73,6 +73,7 @@ def upgrade() -> None:
             sa.ForeignKeyConstraint(
                 ["gateway_id"],
                 ["gateways.id"],
+                ondelete="CASCADE",
             ),
             sa.ForeignKeyConstraint(
                 ["skill_id"],
