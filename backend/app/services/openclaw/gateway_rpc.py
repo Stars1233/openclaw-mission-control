@@ -253,7 +253,7 @@ async def _ensure_connected(
     ws: websockets.ClientConnection,
     first_message: str | bytes | None,
     config: GatewayConfig,
-) -> None:
+) -> object:
     if first_message:
         if isinstance(first_message, bytes):
             first_message = first_message.decode("utf-8")
@@ -272,7 +272,7 @@ async def _ensure_connected(
         "params": _build_connect_params(config),
     }
     await ws.send(json.dumps(response))
-    await _await_response(ws, connect_id)
+    return await _await_response(ws, connect_id)
 
 
 async def openclaw_call(
@@ -321,6 +321,48 @@ async def openclaw_call(
         logger.error(
             "gateway.rpc.call.transport_error method=%s duration_ms=%s error_type=%s",
             method,
+            int((perf_counter() - started_at) * 1000),
+            exc.__class__.__name__,
+        )
+        raise OpenClawGatewayError(str(exc)) from exc
+
+
+async def openclaw_connect_metadata(*, config: GatewayConfig) -> object:
+    """Open a gateway connection and return the connect/hello payload."""
+    gateway_url = _build_gateway_url(config)
+    started_at = perf_counter()
+    logger.debug(
+        "gateway.rpc.connect_metadata.start gateway_url=%s",
+        _redacted_url_for_log(gateway_url),
+    )
+    try:
+        async with websockets.connect(gateway_url, ping_interval=None) as ws:
+            first_message = None
+            try:
+                first_message = await asyncio.wait_for(ws.recv(), timeout=2)
+            except TimeoutError:
+                first_message = None
+            metadata = await _ensure_connected(ws, first_message, config)
+            logger.debug(
+                "gateway.rpc.connect_metadata.success duration_ms=%s",
+                int((perf_counter() - started_at) * 1000),
+            )
+            return metadata
+    except OpenClawGatewayError:
+        logger.warning(
+            "gateway.rpc.connect_metadata.gateway_error duration_ms=%s",
+            int((perf_counter() - started_at) * 1000),
+        )
+        raise
+    except (
+        TimeoutError,
+        ConnectionError,
+        OSError,
+        ValueError,
+        WebSocketException,
+    ) as exc:  # pragma: no cover - network/protocol errors
+        logger.error(
+            "gateway.rpc.connect_metadata.transport_error duration_ms=%s error_type=%s",
             int((perf_counter() - started_at) * 1000),
             exc.__class__.__name__,
         )
