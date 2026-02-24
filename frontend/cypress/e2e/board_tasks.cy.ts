@@ -38,7 +38,7 @@ describe("/boards/:id task board", () => {
     cy.get('button[title="Edit task"]', { timeout: 20_000 })
       .should("be.visible")
       .and("not.be.disabled")
-      .click({ force: true });
+      .click();
     cy.get('[aria-label="Edit task"]', { timeout: 20_000 }).should("be.visible");
   }
 
