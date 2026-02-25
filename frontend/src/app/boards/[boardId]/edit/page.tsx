@@ -1030,7 +1030,9 @@ export default function EditBoardPage() {
                   aria-checked={resolvedCommentRequiredForReview}
                   aria-label="Require comment for review"
                   onClick={() =>
-                    setCommentRequiredForReview(!resolvedCommentRequiredForReview)
+                    setCommentRequiredForReview(
+                      !resolvedCommentRequiredForReview,
+                    )
                   }
                   disabled={isLoading}
                   className={`mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition ${

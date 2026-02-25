@@ -507,7 +507,9 @@ async def test_non_lead_agent_move_to_review_reassigns_to_lead_and_sends_review_
                 return None
 
             monkeypatch.setattr(tasks_api, "GatewayDispatchService", _FakeDispatch)
-            monkeypatch.setattr(tasks_api, "_send_agent_task_message", _fake_send_agent_task_message)
+            monkeypatch.setattr(
+                tasks_api, "_send_agent_task_message", _fake_send_agent_task_message
+            )
 
             task = (await session.exec(select(Task).where(col(Task.id) == task_id))).first()
             assert task is not None
@@ -626,7 +628,9 @@ async def test_lead_moves_review_task_to_inbox_and_reassigns_last_worker_with_re
                 return None
 
             monkeypatch.setattr(tasks_api, "GatewayDispatchService", _FakeDispatch)
-            monkeypatch.setattr(tasks_api, "_send_agent_task_message", _fake_send_agent_task_message)
+            monkeypatch.setattr(
+                tasks_api, "_send_agent_task_message", _fake_send_agent_task_message
+            )
 
             task = (await session.exec(select(Task).where(col(Task.id) == task_id))).first()
             assert task is not None
@@ -838,7 +842,9 @@ async def test_non_lead_agent_moves_to_review_without_comment_when_rule_disabled
 
 
 @pytest.mark.asyncio
-async def test_non_lead_agent_moves_to_review_without_comment_or_recent_comment_fails_when_rule_enabled() -> None:
+async def test_non_lead_agent_moves_to_review_without_comment_or_recent_comment_fails_when_rule_enabled() -> (
+    None
+):
     engine = await _make_engine()
     try:
         async with await _make_session(engine) as session:
